@@ -2,10 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="d87483da-bea0-4c39-8376-afc24a77a5d9" name="Changes" comment="first">
-      <change afterPath="$PROJECT_DIR$/src/p2p/network/DiscoveryService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shared/text.txt" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/p2p/main/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/p2p/main/Main.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/p2p/network/DiscoveryService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/p2p/network/DiscoveryService.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -138,7 +136,7 @@
       <workItem from="1772215471784" duration="119000" />
       <workItem from="1772215599907" duration="1252000" />
       <workItem from="1772348601402" duration="5096000" />
-      <workItem from="1772377071901" duration="2812000" />
+      <workItem from="1772377071901" duration="3411000" />
     </task>
     <task id="LOCAL-00001" summary="first">
       <option name="closed" value="true" />

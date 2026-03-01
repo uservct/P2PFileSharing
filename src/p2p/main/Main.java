@@ -16,16 +16,27 @@ public class Main {
         PeerServer server = new PeerServer(port);
         new Thread(server::start).start();
 
-        // chạy udp discovery listener
+        // Chạy discovery (tất cả dùng cùng multicast address)
         DiscoveryService discoveryService = new DiscoveryService(port);
         discoveryService.startListening();
+
+        // Đợi listener khởi động
+        try {
+            Thread.sleep(1500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Tìm peer ngay khi khởi động
         discoveryService.sendDiscoveryRequest();
 
         PeerClient client = new PeerClient();
         while (true) {
             System.out.println("Chọn: ");
             System.out.println("1. Gửi file");
-            System.out.println("2. Thoát");
+            System.out.println("2. Tìm peer lại");
+            System.err.println("3. Thoát");
+
             int choice = scanner.nextInt();
             scanner.nextLine();
 
@@ -41,6 +52,14 @@ public class Main {
                 String path = scanner.nextLine();
 
                 client.sendFile(host, peerPort, path);
+            } else if (choice == 2) {
+                discoveryService.sendDiscoveryRequest();
+            } else if (choice == 3) {
+                System.out.println("Đang tắt peer...");
+                discoveryService.stop();
+                System.exit(0);
+            } else {
+                System.out.println("Lựa chọn không hợp lệ");
             }
         }
     }
