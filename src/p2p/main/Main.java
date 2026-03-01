@@ -1,7 +1,10 @@
 package p2p.main;
+
 import java.util.Scanner;
+import p2p.network.DiscoveryService;
 import p2p.network.PeerClient;
 import p2p.network.PeerServer;
+
 public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -9,15 +12,20 @@ public class Main {
         int port = scanner.nextInt();
         scanner.nextLine();
 
-        //chạy server
+        // chạy server
         PeerServer server = new PeerServer(port);
         new Thread(server::start).start();
 
+        // chạy udp discovery listener
+        DiscoveryService discoveryService = new DiscoveryService(port);
+        discoveryService.startListening();
+        discoveryService.sendDiscoveryRequest();
+
         PeerClient client = new PeerClient();
         while (true) {
-            System.out.println("\n1. Gửi file");
+            System.out.println("Chọn: ");
+            System.out.println("1. Gửi file");
             System.out.println("2. Thoát");
-            System.out.print("Chọn: ");
             int choice = scanner.nextInt();
             scanner.nextLine();
 
