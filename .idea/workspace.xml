@@ -2,9 +2,11 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="d87483da-bea0-4c39-8376-afc24a77a5d9" name="Changes" comment="first">
-      <change afterPath="$PROJECT_DIR$/src/p2p/main/PeerMain.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/p2p/network/PeerClient.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/p2p/main/Main.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/p2p/main/PeerMain.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/p2p/network/PeerClient.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/p2p/network/PeerClient.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/p2p/network/PeerServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/p2p/network/PeerServer.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -55,6 +57,7 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "git-widget-placeholder": "main",
     "kotlin-language-version-configured": "true",
+    "nodejs_package_manager_path": "npm",
     "onboarding.tips.debug.path": "D:/Code/LTM/Project/P2PFileSharing/src/Main.java",
     "project.structure.last.edited": "Project",
     "project.structure.proportion": "0.15",
@@ -88,35 +91,6 @@
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
-    </configuration>
-    <configuration default="true" type="JetRunConfigurationType">
-      <module name="P2PFileSharing" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
-      <module name="P2PFileSharing" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
     </configuration>
     <configuration default="true" type="tests" factoryName="Doctests">
       <option name="ENV_FILES" value="" />
@@ -164,6 +138,7 @@
       <workItem from="1772215238936" duration="169000" />
       <workItem from="1772215471784" duration="119000" />
       <workItem from="1772215599907" duration="1252000" />
+      <workItem from="1772348601402" duration="4015000" />
     </task>
     <task id="LOCAL-00001" summary="first">
       <option name="closed" value="true" />
