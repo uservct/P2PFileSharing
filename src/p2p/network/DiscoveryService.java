@@ -3,6 +3,7 @@ package p2p.network;
 import java.io.IOException;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import p2p.model.PeerInfo;
@@ -15,10 +16,46 @@ public class DiscoveryService {
     private final ConcurrentHashMap<String, PeerInfo> discoveredPeers = new ConcurrentHashMap<>();
     private static final long PEER_TIMEOUT = 30000; // 30 giây
     private static final int BASE_PORT = 9000;
+    private InetAddress broadcastAddress;
 
     public DiscoveryService(int peerPort) {
         this.peerPort = peerPort;
         this.discoveryPort = BASE_PORT + (peerPort % 1000);
+        this.broadcastAddress = detectBroadcastAddress();
+    }
+
+    /**
+     * Tự động phát hiện broadcast address của LAN
+     */
+    private InetAddress detectBroadcastAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+
+                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+                    continue;
+                }
+
+                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                    InetAddress broadcast = interfaceAddress.getBroadcast();
+                    if (broadcast != null) {
+                        System.out.println("✓ Detected broadcast address: " + broadcast.getHostAddress()
+                                + " on " + networkInterface.getDisplayName());
+                        return broadcast;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("✗ Error detecting broadcast: " + e.getMessage());
+        }
+
+        try {
+            System.out.println("⚠ Using fallback: 255.255.255.255");
+            return InetAddress.getByName("255.255.255.255");
+        } catch (UnknownHostException e) {
+            return null;
+        }
     }
 
     public void startListening() {
@@ -30,8 +67,11 @@ public class DiscoveryService {
         new Thread(() -> {
             try {
                 socket = new DatagramSocket(discoveryPort);
+                socket.setBroadcast(true); // Enable broadcast cho LAN
+                socket.setSoTimeout(1000);
                 System.out
                         .println("✓ Discovery listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
+                System.out.println("✓ Broadcast enabled for LAN");
 
                 while (running) {
                     byte[] buffer = new byte[256];
@@ -79,8 +119,8 @@ public class DiscoveryService {
             try {
                 int port = Integer.parseInt(message.substring(5));
 
-                // Không thêm chính mình
-                if (port == this.peerPort) {
+                // Không thêm chính mình (check cả port lẫn IP)
+                if (port == this.peerPort && isLocalAddress(senderIp)) {
                     return;
                 }
 
@@ -101,6 +141,32 @@ public class DiscoveryService {
         }
     }
 
+    /**
+     * Kiểm tra xem IP có phải local không
+     */
+    private boolean isLocalAddress(String ip) {
+        try {
+            InetAddress addr = InetAddress.getByName(ip);
+            if (addr.isLoopbackAddress()) {
+                return true;
+            }
+
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    if (addresses.nextElement().equals(addr)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return false;
+    }
+
     private void broadcastPresence() {
         if (socket == null || socket.isClosed())
             return;
@@ -108,10 +174,22 @@ public class DiscoveryService {
         String message = "PEER:" + peerPort;
         byte[] data = message.getBytes();
 
-        // Broadcast tới tất cả discovery ports (9000-9099)
+        // 1. Broadcast tới localhost
+        broadcastToLocalhost(data);
+
+        // 2. Broadcast tới LAN
+        if (broadcastAddress != null) {
+            broadcastToLAN(data);
+        }
+    }
+
+    /**
+     * Broadcast tới tất cả ports trên localhost
+     */
+    private void broadcastToLocalhost(byte[] data) {
         for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
             if (port == discoveryPort)
-                continue; // Skip chính mình
+                continue;
 
             try {
                 DatagramPacket packet = new DatagramPacket(
@@ -121,7 +199,25 @@ public class DiscoveryService {
                         port);
                 socket.send(packet);
             } catch (Exception e) {
-                // Ignore - port có thể không có peer
+                // Ignore
+            }
+        }
+    }
+
+    /**
+     * Broadcast tới LAN (tất cả discovery ports)
+     */
+    private void broadcastToLAN(byte[] data) {
+        for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
+            try {
+                DatagramPacket packet = new DatagramPacket(
+                        data,
+                        data.length,
+                        broadcastAddress,
+                        port);
+                socket.send(packet);
+            } catch (Exception e) {
+                // Ignore
             }
         }
     }
@@ -188,5 +284,12 @@ public class DiscoveryService {
      */
     public PeerInfo getPeerInfo(String address) {
         return discoveredPeers.get(address);
+    }
+
+    /**
+     * Get current broadcast address (for debugging)
+     */
+    public String getBroadcastAddress() {
+        return broadcastAddress != null ? broadcastAddress.getHostAddress() : "None";
     }
 }
