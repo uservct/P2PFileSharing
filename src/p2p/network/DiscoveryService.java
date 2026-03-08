@@ -40,18 +40,18 @@ public class DiscoveryService {
                 for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
                     InetAddress broadcast = interfaceAddress.getBroadcast();
                     if (broadcast != null) {
-                        System.out.println("✓ Detected broadcast address: " + broadcast.getHostAddress()
+                        System.out.println("Detected broadcast address: " + broadcast.getHostAddress()
                                 + " on " + networkInterface.getDisplayName());
                         return broadcast;
                     }
                 }
             }
         } catch (Exception e) {
-            System.err.println("✗ Error detecting broadcast: " + e.getMessage());
+            System.err.println("Error detecting broadcast: " + e.getMessage());
         }
 
         try {
-            System.out.println("⚠ Using fallback: 255.255.255.255");
+            System.out.println("Using fallback: 255.255.255.255");
             return InetAddress.getByName("255.255.255.255");
         } catch (UnknownHostException e) {
             return null;
@@ -70,8 +70,8 @@ public class DiscoveryService {
                 socket.setBroadcast(true); // Enable broadcast cho LAN
                 socket.setSoTimeout(1000);
                 System.out
-                        .println("✓ Discovery listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
-                System.out.println("✓ Broadcast enabled for LAN");
+                        .println("Discovery listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
+                System.out.println("Broadcast enabled for LAN");
 
                 while (running) {
                     byte[] buffer = new byte[256];
@@ -87,7 +87,7 @@ public class DiscoveryService {
                 }
             } catch (IOException e) {
                 if (running) {
-                    System.err.println("✗ Discovery listener error: " + e.getMessage());
+                    System.err.println("Discovery listener error: " + e.getMessage());
                 }
             }
         }).start();
@@ -106,7 +106,7 @@ public class DiscoveryService {
                     Thread.sleep(3000); // Broadcast mỗi 3 giây
                 } catch (Exception e) {
                     if (running) {
-                        System.err.println("✗ Broadcast error: " + e.getMessage());
+                        System.err.println("Broadcast error: " + e.getMessage());
                     }
                 }
             }
@@ -130,13 +130,13 @@ public class DiscoveryService {
                 if (peerInfo == null) {
                     peerInfo = new PeerInfo("peer_" + port, senderIp, port, "Peer-" + port);
                     discoveredPeers.put(peerKey, peerInfo);
-                    System.out.println("✓ Discovered peer: " + peerKey);
+                    System.out.println("Discovered peer: " + peerKey);
                 } else {
                     peerInfo.updateLastSeen();
                 }
 
             } catch (Exception e) {
-                System.err.println("✗ Error handling message: " + e.getMessage());
+                System.err.println("Error handling message: " + e.getMessage());
             }
         }
     }
@@ -228,7 +228,7 @@ public class DiscoveryService {
         try {
             broadcastPresence();
         } catch (Exception e) {
-            System.err.println("✗ Manual discovery error: " + e.getMessage());
+            System.err.println("Manual discovery error: " + e.getMessage());
         }
     }
 

@@ -1,17 +1,16 @@
 package p2p.gui;
 
+import java.awt.*;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import p2p.model.PeerInfo;
 import p2p.network.DiscoveryService;
 import p2p.network.PeerClient;
 import p2p.network.PeerServer;
 import p2p.util.FileManager;
-
-import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import java.awt.*;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
 
 /**
  * Giao diện chính cho ứng dụng P2P File Sharing
@@ -168,19 +167,19 @@ public class MainWindow extends JFrame {
         peerServer = new PeerServer(peerPort);
         peerServer.setFileReceivedListener((fileName, senderIp, fileSize) -> {
             SwingUtilities.invokeLater(() -> {
-                log("✓ Đã nhận file: " + fileName + " từ " + senderIp +
+                log("Đã nhận file: " + fileName + " từ " + senderIp +
                         " (" + formatFileSize(fileSize) + ")");
                 refreshFileList();
             });
         });
 
         new Thread(() -> peerServer.start()).start();
-        log("✓ Peer server đã khởi động trên cổng " + peerPort);
+        log("Peer server đã khởi động trên cổng " + peerPort);
 
         // Start discovery service
         discoveryService = new DiscoveryService(peerPort);
         discoveryService.startListening();
-        log("✓ Discovery service đã khởi động");
+        log("Discovery service đã khởi động");
 
         // Wait for discovery to start
         try {
@@ -246,7 +245,7 @@ public class MainWindow extends JFrame {
             peerTableModel.addRow(row);
         }
 
-        log("✓ Tìm thấy " + peers.size() + " peer(s)");
+        log("Tìm thấy " + peers.size() + " peer(s)");
     }
 
     private void refreshFileList() {
@@ -257,7 +256,7 @@ public class MainWindow extends JFrame {
             fileListModel.addElement(file.getName() + " (" + formatFileSize(file.length()) + ")");
         }
 
-        log("✓ Có " + files.size() + " file trong thư mục chia sẻ");
+        log("Có " + files.size() + " file trong thư mục chia sẻ");
     }
 
     private void sendSelectedFile() {
@@ -336,13 +335,13 @@ public class MainWindow extends JFrame {
                 btnSendOtherFile.setEnabled(true);
 
                 if (errorMessage == null) {
-                    log("✓ Đã gửi file thành công!");
+                    log("Đã gửi file thành công!");
                     JOptionPane.showMessageDialog(MainWindow.this,
                             "Đã gửi file thành công!",
                             "Thành công",
                             JOptionPane.INFORMATION_MESSAGE);
                 } else {
-                    log("✗ Lỗi khi gửi file: " + errorMessage);
+                    log("Lỗi khi gửi file: " + errorMessage);
                     JOptionPane.showMessageDialog(MainWindow.this,
                             "Lỗi khi gửi file: " + errorMessage,
                             "Lỗi",
