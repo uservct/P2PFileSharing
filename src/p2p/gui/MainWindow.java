@@ -38,11 +38,67 @@ public class MainWindow extends JFrame {
     public MainWindow(int port) {
         this.peerPort = port;
         this.peerClient = new PeerClient();
-        this.fileManager = new FileManager();
+
+        // Yêu cầu người dùng chọn thư mục chia sẻ ngay từ đầu
+        String selectedFolder = promptForSharedFolder();
+        if (selectedFolder == null) {
+            // Người dùng hủy, thoát ứng dụng
+            System.exit(0);
+            return;
+        }
+
+        this.fileManager = new FileManager(selectedFolder);
+
+        // Thiết lập listener để xử lý từ chối và retry
+        peerClient.setTransferStatusListener(new PeerClient.TransferStatusListener() {
+            @Override
+            public void onTransferRejected(String fileName, String reason) {
+                SwingUtilities.invokeLater(() -> {
+                    log("Gửi thất bại: " + reason + " - File: " + fileName);
+                });
+            }
+
+            @Override
+            public boolean onRetryPrompt(String fileName) {
+                final int[] choice = new int[1];
+                try {
+                    SwingUtilities.invokeAndWait(() -> {
+                        choice[0] = JOptionPane.showConfirmDialog(
+                                MainWindow.this,
+                                "Peer từ chối nhận file: " + fileName + "\n\nBạn có muốn gửi lại không?",
+                                "Gửi lại?",
+                                JOptionPane.YES_NO_OPTION,
+                                JOptionPane.QUESTION_MESSAGE);
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return false;
+                }
+                return (choice[0] == JOptionPane.YES_OPTION);
+            }
+        });
 
         initializeComponents();
         initializeNetwork();
         setVisible(true);
+    }
+
+    private String promptForSharedFolder() {
+        JOptionPane.showMessageDialog(null,
+                "Vui lòng chọn thư mục để chia sẻ file.",
+                "Chọn thư mục chia sẻ",
+                JOptionPane.INFORMATION_MESSAGE);
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Chọn thư mục chia sẻ");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+
+        int result = chooser.showOpenDialog(null);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            return chooser.getSelectedFile().getAbsolutePath();
+        }
+        return null;
     }
 
     private void initializeComponents() {
@@ -163,12 +219,52 @@ public class MainWindow extends JFrame {
     private void initializeNetwork() {
         log("Đang khởi động P2P network trên cổng " + peerPort + "...");
 
-        // Start server in background
-        peerServer = new PeerServer(peerPort);
+        // Start server in background với thư mục chia sẻ
+        peerServer = new PeerServer(peerPort, fileManager.getSharedFolderPath());
+
+        // Listener để xác nhận nhận file
+        peerServer.setFileReceiveRequestListener((fileName, senderIp, fileSize) -> {
+            final int[] choice = new int[1];
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    choice[0] = JOptionPane.showConfirmDialog(
+                            MainWindow.this,
+                            "Nhận file từ " + senderIp + "?\n" +
+                                    "Tên file: " + fileName + "\n" +
+                                    "Kích thước: " + formatFileSize(fileSize),
+                            "Xác nhận nhận file",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.QUESTION_MESSAGE);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+
+            boolean accepted = (choice[0] == JOptionPane.YES_OPTION);
+            if (accepted) {
+                log("Chấp nhận nhận file: " + fileName + " từ " + senderIp);
+            } else {
+                log("Từ chối nhận file: " + fileName + " từ " + senderIp);
+            }
+            return accepted;
+        });
+
         peerServer.setFileReceivedListener((fileName, senderIp, fileSize) -> {
             SwingUtilities.invokeLater(() -> {
                 log("Đã nhận file: " + fileName + " từ " + senderIp +
                         " (" + formatFileSize(fileSize) + ")");
+
+                // Hiển thị thông báo nhận file thành công
+                JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Nhận file thành công!\n" +
+                                "Tên file: " + fileName + "\n" +
+                                "Kích thước: " + formatFileSize(fileSize) + "\n" +
+                                "Từ: " + senderIp,
+                        "Nhận file thành công",
+                        JOptionPane.INFORMATION_MESSAGE);
+
                 refreshFileList();
             });
         });

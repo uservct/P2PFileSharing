@@ -7,18 +7,33 @@ import java.net.Socket;
 public class PeerServer {
     public final static int SERVER_PORT = 7;
     private int port;
+    private String sharedFolderPath;
     private FileReceivedListener listener;
+    private FileReceiveRequestListener receiveRequestListener;
 
     public interface FileReceivedListener {
         void onFileReceived(String fileName, String senderIp, long fileSize);
     }
 
+    public interface FileReceiveRequestListener {
+        boolean onFileReceiveRequest(String fileName, String senderIp, long fileSize);
+    }
+
     public PeerServer(int port) {
+        this(port, "shared");
+    }
+
+    public PeerServer(int port, String sharedFolderPath) {
         this.port = port;
+        this.sharedFolderPath = sharedFolderPath;
     }
 
     public void setFileReceivedListener(FileReceivedListener listener) {
         this.listener = listener;
+    }
+
+    public void setFileReceiveRequestListener(FileReceiveRequestListener listener) {
+        this.receiveRequestListener = listener;
     }
 
     public void start() {
@@ -55,6 +70,7 @@ public class PeerServer {
     private void handleClient(Socket socket) {
         try {
             InputStream is = socket.getInputStream();
+            OutputStream os = socket.getOutputStream();
 
             // Đọc tên file (text line)
             String fileName = readLine(is);
@@ -71,34 +87,54 @@ public class PeerServer {
             }
             long fileSize = Long.parseLong(fileSizeStr);
 
-            System.out.println("Nhận file: " + fileName);
+            System.out.println("Yêu cầu nhận file: " + fileName);
             System.out.println("Kích thước: " + fileSize + " bytes");
+            System.out.println("Từ: " + socket.getInetAddress().getHostAddress());
 
-            File directory = new File("shared");
-            if (!directory.exists()) {
-                directory.mkdirs();
+            // Yêu cầu xác nhận từ người dùng
+            boolean accepted = true; // Mặc định chấp nhận nếu không có listener
+            if (receiveRequestListener != null) {
+                accepted = receiveRequestListener.onFileReceiveRequest(
+                        fileName,
+                        socket.getInetAddress().getHostAddress(),
+                        fileSize);
             }
 
-            // Tạo file để lưu
-            File file = new File(directory, fileName);
-            FileOutputStream fileOutputStream = new FileOutputStream(file);
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            long totalRead = 0;
+            // Gửi phản hồi về peer gửi
+            if (accepted) {
+                os.write("ACCEPT\n".getBytes());
+                os.flush();
 
-            // Đọc dữ liệu từ peer và ghi vào file
-            while (totalRead < fileSize &&
-                    (bytesRead = is.read(buffer, 0, (int) Math.min(buffer.length, fileSize - totalRead))) != -1) {
-                fileOutputStream.write(buffer, 0, bytesRead);
-                totalRead += bytesRead;
-            }
+                File directory = new File(sharedFolderPath);
+                if (!directory.exists()) {
+                    directory.mkdirs();
+                }
 
-            fileOutputStream.close();
-            System.out.println("Đã nhận file: " + fileName);
+                // Tạo file để lưu
+                File file = new File(directory, fileName);
+                FileOutputStream fileOutputStream = new FileOutputStream(file);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                long totalRead = 0;
 
-            // Notify listener
-            if (listener != null) {
-                listener.onFileReceived(fileName, socket.getInetAddress().getHostAddress(), fileSize);
+                // Đọc dữ liệu từ peer và ghi vào file
+                while (totalRead < fileSize &&
+                        (bytesRead = is.read(buffer, 0, (int) Math.min(buffer.length, fileSize - totalRead))) != -1) {
+                    fileOutputStream.write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                }
+
+                fileOutputStream.close();
+                System.out.println("Đã nhận file: " + fileName);
+
+                // Notify listener
+                if (listener != null) {
+                    listener.onFileReceived(fileName, socket.getInetAddress().getHostAddress(), fileSize);
+                }
+            } else {
+                os.write("REJECT\n".getBytes());
+                os.flush();
+                System.out.println("Đã từ chối nhận file: " + fileName);
             }
 
             socket.close();
