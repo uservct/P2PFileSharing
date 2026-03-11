@@ -13,21 +13,31 @@ public class DiscoveryService {
     private final int discoveryPort;
     private volatile boolean running = false;
     private DatagramSocket socket;
+    private MulticastSocket multicastSocket;
     private final ConcurrentHashMap<String, PeerInfo> discoveredPeers = new ConcurrentHashMap<>();
     private static final long PEER_TIMEOUT = 30000; // 30 giây
     private static final int BASE_PORT = 9000;
+    private static final String MULTICAST_GROUP = "224.0.0.251"; // mDNS multicast address
     private InetAddress broadcastAddress;
+    private InetAddress multicastGroup;
+    private boolean useMulticast = true; // Enable multicast by default for WiFi compatibility
 
     public DiscoveryService(int peerPort) {
         this.peerPort = peerPort;
         this.discoveryPort = BASE_PORT + (peerPort % 1000);
         this.broadcastAddress = detectBroadcastAddress();
+        try {
+            this.multicastGroup = InetAddress.getByName(MULTICAST_GROUP);
+        } catch (UnknownHostException e) {
+            System.err.println("Failed to initialize multicast group: " + e.getMessage());
+        }
     }
 
     /**
      * Tự động phát hiện broadcast address của LAN
      */
     private InetAddress detectBroadcastAddress() {
+        System.out.println("\n=== Detecting Network Configuration ===");
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
@@ -37,21 +47,37 @@ public class DiscoveryService {
                     continue;
                 }
 
+                System.out.println("\nInterface: " + networkInterface.getDisplayName());
+                System.out.println("  - Name: " + networkInterface.getName());
+                System.out.println("  - Up: " + networkInterface.isUp());
+                System.out.println("  - Multicast: " + networkInterface.supportsMulticast());
+
                 for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                    InetAddress address = interfaceAddress.getAddress();
                     InetAddress broadcast = interfaceAddress.getBroadcast();
-                    if (broadcast != null) {
-                        System.out.println("Detected broadcast address: " + broadcast.getHostAddress()
-                                + " on " + networkInterface.getDisplayName());
-                        return broadcast;
+
+                    // Only show IPv4 addresses
+                    if (address instanceof java.net.Inet4Address) {
+                        System.out.println("  - IPv4: " + address.getHostAddress());
+                        System.out
+                                .println("  - Broadcast: " + (broadcast != null ? broadcast.getHostAddress() : "null"));
+                        System.out.println("  - Prefix: /" + interfaceAddress.getNetworkPrefixLength());
+
+                        if (broadcast != null) {
+                            System.out.println("\n✓ SELECTED broadcast address: " + broadcast.getHostAddress());
+                            System.out.println("  on interface: " + networkInterface.getDisplayName());
+                            return broadcast;
+                        }
                     }
                 }
             }
         } catch (Exception e) {
             System.err.println("Error detecting broadcast: " + e.getMessage());
+            e.printStackTrace();
         }
 
         try {
-            System.out.println("Using fallback: 255.255.255.255");
+            System.out.println("\n⚠ Using fallback broadcast: 255.255.255.255");
             return InetAddress.getByName("255.255.255.255");
         } catch (UnknownHostException e) {
             return null;
@@ -63,15 +89,14 @@ public class DiscoveryService {
             return;
         running = true;
 
-        // Thread để lắng nghe discovery messages
+        // Thread 1: Lắng nghe broadcast messages
         new Thread(() -> {
             try {
                 socket = new DatagramSocket(discoveryPort);
-                socket.setBroadcast(true); // Enable broadcast cho LAN
+                socket.setBroadcast(true);
                 socket.setSoTimeout(1000);
-                System.out
-                        .println("Discovery listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
-                System.out.println("Broadcast enabled for LAN");
+                System.out.println(
+                        "\n[BROADCAST] Listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
 
                 while (running) {
                     byte[] buffer = new byte[256];
@@ -80,17 +105,61 @@ public class DiscoveryService {
                     try {
                         socket.receive(packet);
                         String message = new String(packet.getData(), 0, packet.getLength()).trim();
-                        handleMessage(message, packet.getAddress().getHostAddress());
+                        handleMessage(message, packet.getAddress().getHostAddress(), "BROADCAST");
                     } catch (SocketTimeoutException e) {
                         // Timeout, continue
                     }
                 }
             } catch (IOException e) {
                 if (running) {
-                    System.err.println("Discovery listener error: " + e.getMessage());
+                    System.err.println("[BROADCAST] Listener error: " + e.getMessage());
                 }
             }
-        }).start();
+        }, "Discovery-Broadcast-Listener").start();
+
+        // Thread 2: Lắng nghe multicast messages (for WiFi)
+        if (useMulticast && multicastGroup != null) {
+            new Thread(() -> {
+                try {
+                    multicastSocket = new MulticastSocket(discoveryPort);
+
+                    // Join multicast group trên tất cả network interfaces
+                    Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                    while (interfaces.hasMoreElements()) {
+                        NetworkInterface ni = interfaces.nextElement();
+                        if (ni.isUp() && !ni.isLoopback() && ni.supportsMulticast()) {
+                            try {
+                                multicastSocket.joinGroup(new InetSocketAddress(multicastGroup, 0), ni);
+                                System.out.println("[MULTICAST] Joined group on: " + ni.getDisplayName());
+                            } catch (IOException e) {
+                                System.err.println(
+                                        "[MULTICAST] Failed to join on " + ni.getDisplayName() + ": " + e.getMessage());
+                            }
+                        }
+                    }
+
+                    multicastSocket.setSoTimeout(1000);
+                    System.out.println("[MULTICAST] Listening on " + MULTICAST_GROUP + ":" + discoveryPort);
+
+                    while (running) {
+                        byte[] buffer = new byte[256];
+                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+                        try {
+                            multicastSocket.receive(packet);
+                            String message = new String(packet.getData(), 0, packet.getLength()).trim();
+                            handleMessage(message, packet.getAddress().getHostAddress(), "MULTICAST");
+                        } catch (SocketTimeoutException e) {
+                            // Timeout, continue
+                        }
+                    }
+                } catch (IOException e) {
+                    if (running) {
+                        System.err.println("[MULTICAST] Listener error: " + e.getMessage());
+                    }
+                }
+            }, "Discovery-Multicast-Listener").start();
+        }
 
         // Thread để broadcast presence định kỳ
         new Thread(() -> {
@@ -113,7 +182,7 @@ public class DiscoveryService {
         }).start();
     }
 
-    private void handleMessage(String message, String senderIp) {
+    private void handleMessage(String message, String senderIp, String source) {
         // Format: PEER:<port>
         if (message.startsWith("PEER:")) {
             try {
@@ -130,7 +199,7 @@ public class DiscoveryService {
                 if (peerInfo == null) {
                     peerInfo = new PeerInfo("peer_" + port, senderIp, port, "Peer-" + port);
                     discoveredPeers.put(peerKey, peerInfo);
-                    System.out.println("Discovered peer: " + peerKey);
+                    System.out.println("[" + source + "] ✓ Discovered peer: " + peerKey);
                 } else {
                     peerInfo.updateLastSeen();
                 }
@@ -181,6 +250,11 @@ public class DiscoveryService {
         if (broadcastAddress != null) {
             broadcastToLAN(data);
         }
+
+        // 3. Multicast tới LAN (for WiFi compatibility)
+        if (useMulticast && multicastGroup != null && multicastSocket != null) {
+            multicastToLAN(data);
+        }
     }
 
     /**
@@ -208,6 +282,7 @@ public class DiscoveryService {
      * Broadcast tới LAN (tất cả discovery ports)
      */
     private void broadcastToLAN(byte[] data) {
+        int successCount = 0;
         for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
             try {
                 DatagramPacket packet = new DatagramPacket(
@@ -216,9 +291,36 @@ public class DiscoveryService {
                         broadcastAddress,
                         port);
                 socket.send(packet);
+                successCount++;
             } catch (Exception e) {
-                // Ignore
+                // Ignore individual port failures
             }
+        }
+        if (successCount == 0) {
+            System.err.println("[BROADCAST] Warning: Failed to send to any port");
+        }
+    }
+
+    /**
+     * Multicast tới LAN (for WiFi - ít bị chặn hơn broadcast)
+     */
+    private void multicastToLAN(byte[] data) {
+        int successCount = 0;
+        for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
+            try {
+                DatagramPacket packet = new DatagramPacket(
+                        data,
+                        data.length,
+                        multicastGroup,
+                        port);
+                multicastSocket.send(packet);
+                successCount++;
+            } catch (Exception e) {
+                // Ignore individual port failures
+            }
+        }
+        if (successCount == 0) {
+            System.err.println("[MULTICAST] Warning: Failed to send to any port");
         }
     }
 
@@ -237,6 +339,28 @@ public class DiscoveryService {
         if (socket != null && !socket.isClosed()) {
             socket.close();
         }
+        if (multicastSocket != null && !multicastSocket.isClosed()) {
+            try {
+                // Leave multicast group
+                if (multicastGroup != null) {
+                    Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                    while (interfaces.hasMoreElements()) {
+                        NetworkInterface ni = interfaces.nextElement();
+                        if (ni.isUp() && !ni.isLoopback()) {
+                            try {
+                                multicastSocket.leaveGroup(new InetSocketAddress(multicastGroup, 0), ni);
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        }
+                    }
+                }
+                multicastSocket.close();
+            } catch (Exception e) {
+                System.err.println("Error closing multicast socket: " + e.getMessage());
+            }
+        }
+        System.out.println("\n[DISCOVERY] Service stopped");
     }
 
     /**
