@@ -1,148 +1,293 @@
 package p2p.network;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import p2p.model.PeerInfo;
 
+/**
+ * TCP Discovery Service - Không dùng UDP broadcast
+ * Mỗi peer mở TCP server và quét subnet để tìm peer khác
+ */
 public class DiscoveryService {
     private final int peerPort;
     private final int discoveryPort;
     private volatile boolean running = false;
-    private DatagramSocket socket;
+    private ServerSocket serverSocket;
     private final ConcurrentHashMap<String, PeerInfo> discoveredPeers = new ConcurrentHashMap<>();
     private static final long PEER_TIMEOUT = 30000; // 30 giây
     private static final int BASE_PORT = 9000;
-    private InetAddress broadcastAddress;
+    private static final int SCAN_TIMEOUT = 150; // Timeout khi quét mỗi IP (ms)
+    private final List<String> subnetRanges = new ArrayList<>();
+    private final ExecutorService scanExecutor = Executors.newFixedThreadPool(100);
 
     public DiscoveryService(int peerPort) {
         this.peerPort = peerPort;
         this.discoveryPort = BASE_PORT + (peerPort % 1000);
-        this.broadcastAddress = detectBroadcastAddress();
+
+        System.out.println("\n========================================");
+        System.out.println("TCP DISCOVERY SERVICE KHỞI ĐỘNG");
+        System.out.println("Peer Port: " + peerPort);
+        System.out.println("Discovery Port: " + discoveryPort);
+        System.out.println("========================================\n");
+
+        detectSubnetRanges();
     }
 
     /**
-     * Tự động phát hiện broadcast address của LAN
+     * Phát hiện tất cả dải subnet cần quét
      */
-    private InetAddress detectBroadcastAddress() {
+    private void detectSubnetRanges() {
+        System.out.println("\n=== PHÁT HIỆN DÃNG MẠNG ===");
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = interfaces.nextElement();
+                NetworkInterface ni = interfaces.nextElement();
 
-                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+                if (ni.isLoopback() || !ni.isUp()) {
                     continue;
                 }
 
-                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
-                    InetAddress broadcast = interfaceAddress.getBroadcast();
-                    if (broadcast != null) {
-                        System.out.println("Detected broadcast address: " + broadcast.getHostAddress()
-                                + " on " + networkInterface.getDisplayName());
-                        return broadcast;
+                for (InterfaceAddress addr : ni.getInterfaceAddresses()) {
+                    InetAddress ip = addr.getAddress();
+
+                    // Chỉ xử lý IPv4
+                    if (!(ip instanceof Inet4Address)) {
+                        continue;
+                    }
+
+                    short prefixLength = addr.getNetworkPrefixLength();
+                    String ipStr = ip.getHostAddress();
+
+                    System.out.println("\n--- Interface: " + ni.getDisplayName() + " ---");
+                    System.out.println("  IP: " + ipStr);
+                    System.out.println("  Prefix: /" + prefixLength);
+
+                    // Tính subnet cho các prefix length phổ biến
+                    String subnet = null;
+                    if (prefixLength >= 16 && prefixLength <= 32) {
+                        // Lấy 3 octet đầu cho /24, /22, /23, etc.
+                        int lastDot = ipStr.lastIndexOf('.');
+                        if (lastDot > 0) {
+                            subnet = ipStr.substring(0, lastDot);
+                            if (!subnetRanges.contains(subnet)) {
+                                subnetRanges.add(subnet);
+                                System.out.println("  ✓✓✓ THÊM SUBNET: " + subnet + ".1-254 ✓✓✓");
+                            }
+                        }
                     }
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Error detecting broadcast: " + e.getMessage());
+
+            if (subnetRanges.isEmpty()) {
+                System.out.println("⚠ Không phát hiện subnet, sẽ quét 192.168.1");
+                subnetRanges.add("192.168.1");
+                subnetRanges.add("127.0.0");
+            }
+
+        } catch (SocketException e) {
+            System.err.println("❌ Lỗi phát hiện subnet: " + e.getMessage());
+            e.printStackTrace();
+            subnetRanges.add("192.168.1");
+            subnetRanges.add("127.0.0");
         }
 
-        try {
-            System.out.println("Using fallback: 255.255.255.255");
-            return InetAddress.getByName("255.255.255.255");
-        } catch (UnknownHostException e) {
-            return null;
+        System.out.println("\n=== KẾT QUẢ SUBNET DETECTION ===");
+        for (String subnet : subnetRanges) {
+            System.out.println("  → Sẽ quét: " + subnet + ".1-254");
         }
+        System.out.println("=================================\n");
     }
 
+    /**
+     * Khởi động TCP Discovery Service
+     */
     public void startListening() {
         if (running)
             return;
         running = true;
 
-        // Thread để lắng nghe discovery messages
+        // Thread 1: TCP Server lắng nghe kết nối từ peer khác
         new Thread(() -> {
             try {
-                socket = new DatagramSocket(discoveryPort);
-                socket.setBroadcast(true); // Enable broadcast cho LAN
-                socket.setSoTimeout(1000);
-                System.out
-                        .println("Discovery listening on port: " + discoveryPort + " (peer port: " + peerPort + ")");
-                System.out.println("Broadcast enabled for LAN");
+                serverSocket = new ServerSocket(discoveryPort);
+                serverSocket.setSoTimeout(1000); // Timeout để có thể check running flag
+                System.out.println("✓ TCP Discovery Server đang lắng nghe trên port: " + discoveryPort);
 
                 while (running) {
-                    byte[] buffer = new byte[256];
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-
                     try {
-                        socket.receive(packet);
-                        String message = new String(packet.getData(), 0, packet.getLength()).trim();
-                        handleMessage(message, packet.getAddress().getHostAddress());
+                        Socket clientSocket = serverSocket.accept();
+                        // Xử lý kết nối trong thread riêng
+                        scanExecutor.submit(() -> handleIncomingConnection(clientSocket));
                     } catch (SocketTimeoutException e) {
-                        // Timeout, continue
+                        // Timeout bình thường, tiếp tục loop
                     }
                 }
             } catch (IOException e) {
                 if (running) {
-                    System.err.println("Discovery listener error: " + e.getMessage());
+                    System.err.println("❌ Lỗi TCP Server: " + e.getMessage());
                 }
             }
-        }).start();
+        }, "TCP-Discovery-Server").start();
 
-        // Thread để broadcast presence định kỳ
+        // Thread 2: Quét subnet định kỳ để tìm peer
         new Thread(() -> {
             try {
-                Thread.sleep(500); // Chờ listener start
+                Thread.sleep(1000); // Đợi server khởi động
             } catch (InterruptedException e) {
                 return;
             }
 
+            System.out.println("✓ Bắt đầu quét subnet...\n");
+
             while (running) {
                 try {
-                    broadcastPresence();
-                    Thread.sleep(3000); // Broadcast mỗi 3 giây
-                } catch (Exception e) {
-                    if (running) {
-                        System.err.println("Broadcast error: " + e.getMessage());
-                    }
+                    scanForPeers();
+                    Thread.sleep(10000); // Quét lại mỗi 10 giây
+                } catch (InterruptedException e) {
+                    break;
                 }
             }
-        }).start();
+        }, "TCP-Discovery-Scanner").start();
     }
 
-    private void handleMessage(String message, String senderIp) {
-        // Format: PEER:<port>
-        if (message.startsWith("PEER:")) {
-            try {
+    /**
+     * Xử lý kết nối TCP từ peer khác
+     */
+    private void handleIncomingConnection(Socket clientSocket) {
+        try {
+            clientSocket.setSoTimeout(2000);
+            String clientIp = clientSocket.getInetAddress().getHostAddress();
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+
+            // Đọc thông tin peer gửi đến
+            String message = in.readLine();
+
+            if (message != null && message.startsWith("PEER:")) {
                 int port = Integer.parseInt(message.substring(5));
 
-                // Không thêm chính mình (check cả port lẫn IP)
-                if (port == this.peerPort && isLocalAddress(senderIp)) {
+                // Không thêm chính mình
+                if (port == this.peerPort && isLocalAddress(clientIp)) {
+                    clientSocket.close();
                     return;
                 }
 
-                String peerKey = senderIp + ":" + port;
-
+                // Thêm peer vào danh sách
+                String peerKey = clientIp + ":" + port;
                 PeerInfo peerInfo = discoveredPeers.get(peerKey);
+
                 if (peerInfo == null) {
-                    peerInfo = new PeerInfo("peer_" + port, senderIp, port, "Peer-" + port);
+                    peerInfo = new PeerInfo("peer_" + port, clientIp, port, "Peer-" + port);
                     discoveredPeers.put(peerKey, peerInfo);
-                    System.out.println("Discovered peer: " + peerKey);
+                    System.out.println("✓ Phát hiện peer mới: " + peerKey);
                 } else {
                     peerInfo.updateLastSeen();
                 }
 
-            } catch (Exception e) {
-                System.err.println("Error handling message: " + e.getMessage());
+                // Gửi lại thông tin của mình
+                out.println("PEER:" + this.peerPort);
+            }
+
+            clientSocket.close();
+
+        } catch (IOException | NumberFormatException e) {
+            // Ignore connection errors
+        }
+    }
+
+    /**
+     * Quét tất cả subnet để tìm peer
+     */
+    private void scanForPeers() {
+        System.out.println("\n╔════════════════════════════════════════╗");
+        System.out.println("║   BẮT ĐẦU QUÉT TÌM PEER (TCP SCAN)    ║");
+        System.out.println("╚════════════════════════════════════════╝");
+
+        for (String subnet : subnetRanges) {
+            System.out.println("\n→ Đang quét dải: " + subnet + ".1 đến " + subnet + ".254");
+            System.out.println("  Discovery Ports: " + BASE_PORT + " đến " + (BASE_PORT + 9));
+            System.out.println("  Timeout: " + SCAN_TIMEOUT + "ms\n");
+
+            // Quét song song với ThreadPool
+            for (int i = 1; i <= 254; i++) {
+                final String ip = subnet + "." + i;
+                for (int portOffset = 0; portOffset < 10; portOffset++) {
+                    final int targetPort = BASE_PORT + portOffset;
+                    scanExecutor.submit(() -> tryConnectToPeer(ip, targetPort));
+                }
+            }
+        }
+
+        System.out.println("→ Đã gửi " + (subnetRanges.size() * 254 * 10) + " yêu cầu quét");
+        System.out.println("  (Chờ kết quả...)\n");
+    }
+
+    /**
+     * Thử kết nối TCP đến một IP để kiểm tra có peer không
+     */
+    private void tryConnectToPeer(String ip, int targetPort) {
+        // Không block IP local nữa để peer trên cùng 1 máy tìm thấy nhau
+
+        try (Socket socket = new Socket()) {
+            // Thử kết nối TCP
+            socket.connect(new InetSocketAddress(ip, targetPort), SCAN_TIMEOUT);
+
+            System.out.println("  [SCAN] Kết nối TCP thành công đến " + ip + ":" + targetPort);
+
+            // Kết nối thành công, gửi thông tin
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            socket.setSoTimeout(2000); // Timeout cho đọc response
+
+            // Gửi thông tin của mình
+            out.println("PEER:" + this.peerPort);
+            System.out.println("  [SCAN] Đã gửi: PEER:" + this.peerPort + " đến " + ip);
+
+            // Nhận thông tin peer
+            String response = in.readLine();
+            System.out.println("  [SCAN] Nhận được: " + response + " từ " + ip);
+
+            if (response != null && response.startsWith("PEER:")) {
+                int port = Integer.parseInt(response.substring(5));
+
+                String peerKey = ip + ":" + port;
+                PeerInfo peerInfo = discoveredPeers.get(peerKey);
+
+                if (peerInfo == null) {
+                    peerInfo = new PeerInfo("peer_" + port, ip, port, "Peer-" + port);
+                    discoveredPeers.put(peerKey, peerInfo);
+                    System.out.println("\n✓✓✓ TÌM THẤY PEER MỚI: " + peerKey + " ✓✓✓\n");
+                } else {
+                    peerInfo.updateLastSeen();
+                    System.out.println("  [SCAN] Cập nhật peer: " + peerKey);
+                }
+            } else {
+                System.out.println("  [SCAN] ⚠ Response không hợp lệ từ " + ip);
+            }
+
+        } catch (ConnectException e) {
+            // Connection refused - không có peer
+        } catch (SocketTimeoutException e) {
+            // Timeout - không có peer hoặc chậm
+        } catch (IOException | NumberFormatException e) {
+            // Lỗi khác
+            if (e.getMessage() != null && !e.getMessage().contains("Connection refused")
+                    && !e.getMessage().contains("timed out")) {
+                System.out.println("  [SCAN] Lỗi kết nối " + ip + ": " + e.getMessage());
             }
         }
     }
 
     /**
-     * Kiểm tra xem IP có phải local không
+     * Kiểm tra xem IP có phải là địa chỉ local không
      */
     private boolean isLocalAddress(String ip) {
         try {
@@ -161,82 +306,39 @@ public class DiscoveryService {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (SocketException | UnknownHostException e) {
             // Ignore
         }
         return false;
     }
 
-    private void broadcastPresence() {
-        if (socket == null || socket.isClosed())
-            return;
-
-        String message = "PEER:" + peerPort;
-        byte[] data = message.getBytes();
-
-        // 1. Broadcast tới localhost
-        broadcastToLocalhost(data);
-
-        // 2. Broadcast tới LAN
-        if (broadcastAddress != null) {
-            broadcastToLAN(data);
-        }
-    }
-
     /**
-     * Broadcast tới tất cả ports trên localhost
+     * Gửi yêu cầu discovery thủ công (trigger quét ngay)
      */
-    private void broadcastToLocalhost(byte[] data) {
-        for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
-            if (port == discoveryPort)
-                continue;
-
-            try {
-                DatagramPacket packet = new DatagramPacket(
-                        data,
-                        data.length,
-                        InetAddress.getByName("127.0.0.1"),
-                        port);
-                socket.send(packet);
-            } catch (Exception e) {
-                // Ignore
-            }
-        }
-    }
-
-    /**
-     * Broadcast tới LAN (tất cả discovery ports)
-     */
-    private void broadcastToLAN(byte[] data) {
-        for (int port = BASE_PORT; port < BASE_PORT + 100; port++) {
-            try {
-                DatagramPacket packet = new DatagramPacket(
-                        data,
-                        data.length,
-                        broadcastAddress,
-                        port);
-                socket.send(packet);
-            } catch (Exception e) {
-                // Ignore
-            }
-        }
-    }
-
     public void sendDiscoveryRequest() {
-        // Method này giờ chỉ trigger một broadcast ngay lập tức
-        System.out.println("Manually triggering discovery...");
-        try {
-            broadcastPresence();
-        } catch (Exception e) {
-            System.err.println("Manual discovery error: " + e.getMessage());
-        }
+        System.out.println("!!! Kích hoạt quét thủ công !!!");
+        scanExecutor.submit(this::scanForPeers);
     }
 
+    /**
+     * Dừng Discovery Service
+     */
     public void stop() {
         running = false;
-        if (socket != null && !socket.isClosed()) {
-            socket.close();
+
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            try {
+                serverSocket.close();
+            } catch (IOException e) {
+                // Ignore
+            }
         }
+
+        if (scanExecutor != null && !scanExecutor.isShutdown()) {
+            scanExecutor.shutdownNow();
+        }
+
+        System.out.println("\n✗ TCP Discovery Service đã dừng\n");
     }
 
     /**
@@ -255,7 +357,7 @@ public class DiscoveryService {
 
         for (String key : toRemove) {
             discoveredPeers.remove(key);
-            System.out.println("Removed timeout peer: " + key);
+            System.out.println("⊗ Removed timeout peer: " + key);
         }
     }
 
@@ -287,9 +389,9 @@ public class DiscoveryService {
     }
 
     /**
-     * Get current broadcast address (for debugging)
+     * Lấy danh sách subnet đang quét (để debug)
      */
     public String getBroadcastAddress() {
-        return broadcastAddress != null ? broadcastAddress.getHostAddress() : "None";
+        return String.join(", ", subnetRanges);
     }
 }

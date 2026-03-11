@@ -13,7 +13,6 @@ public class Main {
                     "P2P File Sharing",
                     JOptionPane.QUESTION_MESSAGE);
 
-                    
             if (portStr == null || portStr.trim().isEmpty()) {
                 System.out.println("Đã hủy khởi động.");
                 System.exit(0);
