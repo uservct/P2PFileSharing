@@ -98,6 +98,23 @@ public class FileManager {
     }
 
     /**
+     * Tìm kiếm file theo từ khóa (khớp một phần, không phân biệt hoa/thường)
+     */
+    public List<File> searchFiles(String keyword) {
+        List<File> result = new ArrayList<>();
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return result;
+        }
+        String lowerKeyword = keyword.trim().toLowerCase();
+        for (File file : getSharedFiles()) {
+            if (file.getName().toLowerCase().contains(lowerKeyword)) {
+                result.add(file);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Làm mới danh sách file (re-scan thư mục)
      */
     public void refresh() {
