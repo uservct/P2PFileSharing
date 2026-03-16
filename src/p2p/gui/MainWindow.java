@@ -24,18 +24,11 @@ public class MainWindow extends JFrame {
     private PeerClient peerClient;
     private FileManager fileManager;
 
-    // GUI Components – Peer & Files
-    private JLabel lblSharedFolder;
-    private JButton btnChooseFolder;
-    private JTable tblPeers;
-    private DefaultTableModel peerTableModel;
-    private JButton btnRefreshPeers;
-    private JList<String> lstFiles;
-    private DefaultListModel<String> fileListModel;
-    private JButton btnSendFile;
-    private JButton btnRefreshFiles;
-    private JTextArea txtLog;
-    private JButton btnSendOtherFile;
+    // GUI Panels – chia theo chức năng
+    private SharedFolderPanel sharedFolderPanel;
+    private PeersPanel peersPanel;
+    private SharedFilesPanel sharedFilesPanel;
+    private SearchPanel searchPanel;
 
     // GUI Components – File Search
     private JTextField txtSearchKeyword;
@@ -121,12 +114,9 @@ public class MainWindow extends JFrame {
 
         // Center – tabbed: [Peers & Files] [Tìm kiếm]
         JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.addTab("📁  Peers & Files", createPeersFilesPanel());
-        tabbedPane.addTab("🔍  Tìm kiếm File", createSearchPanel());
+        tabbedPane.addTab("Peers & Files", createPeersFilesPanel());
+        tabbedPane.addTab("Tìm kiếm File", createSearchPanel());
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
-
-        // Bottom – Log
-        mainPanel.add(createLogPanel(), BorderLayout.SOUTH);
 
         add(mainPanel);
     }
@@ -135,19 +125,10 @@ public class MainWindow extends JFrame {
     // TOP PANEL
     // ------------------------------------------------------------------
     private JPanel createTopPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setBorder(BorderFactory.createTitledBorder("Thư mục chia sẻ"));
-
-        lblSharedFolder = new JLabel(fileManager.getSharedFolderPath());
-        lblSharedFolder.setPreferredSize(new Dimension(500, 25));
-
-        btnChooseFolder = new JButton("Chọn thư mục");
-        btnChooseFolder.addActionListener(e -> chooseSharedFolder());
-
-        panel.add(new JLabel("Thư mục: "));
-        panel.add(lblSharedFolder);
-        panel.add(btnChooseFolder);
-        return panel;
+        sharedFolderPanel = new SharedFolderPanel(
+                fileManager.getSharedFolderPath(),
+                this::onSharedFolderChanged);
+        return sharedFolderPanel;
     }
 
     // ------------------------------------------------------------------
@@ -157,61 +138,31 @@ public class MainWindow extends JFrame {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
 
         JSplitPane centerSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        centerSplitPane.setLeftComponent(createPeerPanel());
-        centerSplitPane.setRightComponent(createFilePanel());
+
+        peersPanel = new PeersPanel(this::refreshPeers);
+
+        sharedFilesPanel = new SharedFilesPanel(new SharedFilesPanel.Listener() {
+            @Override
+            public void onRefreshFiles() {
+                refreshFileList();
+            }
+
+            @Override
+            public void onSendSelectedFile() {
+                sendSelectedFile();
+            }
+
+            @Override
+            public void onSendOtherFile() {
+                sendOtherFile();
+            }
+        });
+
+        centerSplitPane.setLeftComponent(peersPanel);
+        centerSplitPane.setRightComponent(sharedFilesPanel);
         centerSplitPane.setDividerLocation(430);
         panel.add(centerSplitPane, BorderLayout.CENTER);
 
-        return panel;
-    }
-
-    private JPanel createPeerPanel() {
-        JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(BorderFactory.createTitledBorder("Danh sách Peers"));
-
-        String[] columns = { "IP", "Port", "Username", "Trạng thái" };
-        peerTableModel = new DefaultTableModel(columns, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-        tblPeers = new JTable(peerTableModel);
-        JScrollPane scrollPane = new JScrollPane(tblPeers);
-
-        btnRefreshPeers = new JButton("Làm mới danh sách");
-        btnRefreshPeers.addActionListener(e -> refreshPeers());
-
-        panel.add(scrollPane, BorderLayout.CENTER);
-        panel.add(btnRefreshPeers, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    private JPanel createFilePanel() {
-        JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(BorderFactory.createTitledBorder("File trong thư mục chia sẻ"));
-
-        fileListModel = new DefaultListModel<>();
-        lstFiles = new JList<>(fileListModel);
-        JScrollPane scrollPane = new JScrollPane(lstFiles);
-
-        JPanel btnPanel = new JPanel(new GridLayout(3, 1, 5, 5));
-
-        btnRefreshFiles = new JButton("Làm mới danh sách file");
-        btnRefreshFiles.addActionListener(e -> refreshFileList());
-
-        btnSendFile = new JButton("Gửi file đã chọn");
-        btnSendFile.addActionListener(e -> sendSelectedFile());
-
-        btnSendOtherFile = new JButton("Gửi file khác...");
-        btnSendOtherFile.addActionListener(e -> sendOtherFile());
-
-        btnPanel.add(btnRefreshFiles);
-        btnPanel.add(btnSendFile);
-        btnPanel.add(btnSendOtherFile);
-
-        panel.add(scrollPane, BorderLayout.CENTER);
-        panel.add(btnPanel, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -219,30 +170,18 @@ public class MainWindow extends JFrame {
     // TAB 2: TÌM KIẾM FILE
     // ------------------------------------------------------------------
     private JPanel createSearchPanel() {
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-
-        // ------ Top: thanh tìm kiếm ------
-        JPanel searchBar = new JPanel(new BorderLayout(6, 0));
-        searchBar.setBorder(BorderFactory.createTitledBorder("Tìm kiếm file trên tất cả Peers"));
-
+        // Tạo component tìm kiếm như cũ
         txtSearchKeyword = new JTextField();
         txtSearchKeyword.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         txtSearchKeyword.setToolTipText("Nhập tên hoặc từ khóa của file cần tìm");
 
-        btnSearch = new JButton("🔍 Tìm kiếm");
+        btnSearch = new JButton("Tìm kiếm");
         btnSearch.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btnSearch.setPreferredSize(new Dimension(120, 32));
 
         // Nhấn Enter cũng tìm kiếm
         txtSearchKeyword.addActionListener(e -> performSearch());
         btnSearch.addActionListener(e -> performSearch());
 
-        searchBar.add(new JLabel("  Từ khóa: "), BorderLayout.WEST);
-        searchBar.add(txtSearchKeyword, BorderLayout.CENTER);
-        searchBar.add(btnSearch, BorderLayout.EAST);
-
-        // ------ Center: bảng kết quả ------
         String[] resultColumns = { "Tên File", "Kích thước", "Peer IP", "Peer Port" };
         searchTableModel = new DefaultTableModel(resultColumns, 0) {
             @Override
@@ -257,16 +196,10 @@ public class MainWindow extends JFrame {
         tblSearchResults.getColumnModel().getColumn(2).setPreferredWidth(130);
         tblSearchResults.getColumnModel().getColumn(3).setPreferredWidth(80);
 
-        JScrollPane scrollPane = new JScrollPane(tblSearchResults);
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Kết quả tìm kiếm"));
-
-        // ------ Bottom: nút Tải về ------
-        JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnDownload = new JButton("⬇  Tải về");
+        btnDownload = new JButton("Tải về");
         btnDownload.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btnDownload.setEnabled(false);
         btnDownload.addActionListener(e -> downloadSelectedFile());
-        bottomBar.add(btnDownload);
 
         // Bật nút Tải về khi chọn hàng
         tblSearchResults.getSelectionModel().addListSelectionListener(e -> {
@@ -275,25 +208,9 @@ public class MainWindow extends JFrame {
             }
         });
 
-        panel.add(searchBar, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-        panel.add(bottomBar, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    // ------------------------------------------------------------------
-    // LOG PANEL
-    // ------------------------------------------------------------------
-    private JPanel createLogPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Log"));
-        panel.setPreferredSize(new Dimension(0, 150));
-
-        txtLog = new JTextArea();
-        txtLog.setEditable(false);
-        JScrollPane scrollPane = new JScrollPane(txtLog);
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
+        // Giao layout cho SearchPanel
+        searchPanel = new SearchPanel(txtSearchKeyword, btnSearch, tblSearchResults, btnDownload);
+        return searchPanel;
     }
 
     // ------------------------------------------------------------------
@@ -370,26 +287,20 @@ public class MainWindow extends JFrame {
     // ------------------------------------------------------------------
     // ACTIONS – CŨ
     // ------------------------------------------------------------------
-    private void chooseSharedFolder() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        chooser.setCurrentDirectory(new File(fileManager.getSharedFolderPath()));
-
-        int result = chooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFolder = chooser.getSelectedFile();
-            fileManager.setSharedFolder(selectedFolder.getAbsolutePath());
-            // Đồng bộ thư mục cho PeerServer (để trả lời SEND/SEARCH đúng thư mục mới)
+    private void onSharedFolderChanged(String newPath) {
+        fileManager.setSharedFolder(newPath);
+        if (peerServer != null) {
             peerServer.setFileManager(fileManager);
-            lblSharedFolder.setText(fileManager.getSharedFolderPath());
-            log("Đã chọn thư mục chia sẻ: " + selectedFolder.getAbsolutePath());
-            refreshFileList();
         }
+        log("Đã chọn thư mục chia sẻ: " + newPath);
+        refreshFileList();
     }
 
     private void refreshPeers() {
         log("Đang tìm kiếm peers...");
-        btnRefreshPeers.setEnabled(false);
+        if (peersPanel != null) {
+            peersPanel.setRefreshEnabled(false);
+        }
 
         new Thread(() -> {
             discoveryService.sendDiscoveryRequest();
@@ -402,51 +313,58 @@ public class MainWindow extends JFrame {
 
             SwingUtilities.invokeLater(() -> {
                 updatePeerTable();
-                btnRefreshPeers.setEnabled(true);
+                if (peersPanel != null) {
+                    peersPanel.setRefreshEnabled(true);
+                }
             });
         }).start();
     }
 
     private void updatePeerTable() {
-        peerTableModel.setRowCount(0);
         List<PeerInfo> peers = discoveryService.getPeerInfoList();
-        for (PeerInfo peer : peers) {
-            peerTableModel.addRow(new Object[]{
-                    peer.getIpAddress(),
-                    peer.getPort(),
-                    peer.getUsername(),
-                    "Online"
-            });
+        if (peersPanel != null) {
+            peersPanel.setPeers(peers);
         }
         log("Tìm thấy " + peers.size() + " peer(s)");
     }
 
     private void refreshFileList() {
-        fileListModel.clear();
         List<File> files = fileManager.getSharedFiles();
+        List<String> labels = new ArrayList<>();
         for (File file : files) {
-            fileListModel.addElement(file.getName() + " (" + formatFileSize(file.length()) + ")");
+            labels.add(file.getName() + " (" + formatFileSize(file.length()) + ")");
+        }
+        if (sharedFilesPanel != null) {
+            sharedFilesPanel.setFileList(labels);
         }
         log("Có " + files.size() + " file trong thư mục chia sẻ");
     }
 
     private void sendSelectedFile() {
-        int selectedPeerRow = tblPeers.getSelectedRow();
-        if (selectedPeerRow == -1) {
+        if (peersPanel == null || !peersPanel.hasSelection()) {
             JOptionPane.showMessageDialog(this, "Vui lòng chọn peer để gửi file!",
                     "Thông báo", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        int selectedFileIndex = lstFiles.getSelectedIndex();
+        if (sharedFilesPanel == null) {
+            return;
+        }
+
+        int selectedFileIndex = sharedFilesPanel.getSelectedFileIndex();
         if (selectedFileIndex == -1) {
             JOptionPane.showMessageDialog(this, "Vui lòng chọn file để gửi!",
                     "Thông báo", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        String peerIp = (String) peerTableModel.getValueAt(selectedPeerRow, 0);
-        int peerPort = (Integer) peerTableModel.getValueAt(selectedPeerRow, 1);
+        String peerIp = peersPanel.getSelectedPeerIp();
+        Integer peerPort = peersPanel.getSelectedPeerPort();
+        if (peerIp == null || peerPort == null) {
+            JOptionPane.showMessageDialog(this, "Không lấy được thông tin peer để gửi file.",
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
         List<File> files = fileManager.getSharedFiles();
         File fileToSend = files.get(selectedFileIndex);
@@ -455,8 +373,7 @@ public class MainWindow extends JFrame {
     }
 
     private void sendOtherFile() {
-        int selectedPeerRow = tblPeers.getSelectedRow();
-        if (selectedPeerRow == -1) {
+        if (peersPanel == null || !peersPanel.hasSelection()) {
             JOptionPane.showMessageDialog(this, "Vui lòng chọn peer để gửi file!",
                     "Thông báo", JOptionPane.WARNING_MESSAGE);
             return;
@@ -468,16 +385,22 @@ public class MainWindow extends JFrame {
         int result = chooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = chooser.getSelectedFile();
-            String peerIp = (String) peerTableModel.getValueAt(selectedPeerRow, 0);
-            int peerPort = (Integer) peerTableModel.getValueAt(selectedPeerRow, 1);
+            String peerIp = peersPanel.getSelectedPeerIp();
+            Integer peerPort = peersPanel.getSelectedPeerPort();
+            if (peerIp == null || peerPort == null) {
+                JOptionPane.showMessageDialog(this, "Không lấy được thông tin peer để gửi file.",
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
             sendFile(peerIp, peerPort, selectedFile.getAbsolutePath());
         }
     }
 
     private void sendFile(String host, int port, String filePath) {
         log("Đang gửi file đến " + host + ":" + port + "...");
-        btnSendFile.setEnabled(false);
-        btnSendOtherFile.setEnabled(false);
+        if (sharedFilesPanel != null) {
+            sharedFilesPanel.setSendButtonsEnabled(false);
+        }
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             private String errorMessage = null;
@@ -494,8 +417,9 @@ public class MainWindow extends JFrame {
 
             @Override
             protected void done() {
-                btnSendFile.setEnabled(true);
-                btnSendOtherFile.setEnabled(true);
+                if (sharedFilesPanel != null) {
+                    sharedFilesPanel.setSendButtonsEnabled(true);
+                }
 
                 if (errorMessage == null) {
                     log("Đã gửi file thành công!");
@@ -541,8 +465,7 @@ public class MainWindow extends JFrame {
         btnDownload.setEnabled(false);
         log("Đang tìm kiếm \"" + keyword + "\" trên " + peers.size() + " peer(s)...");
 
-        SwingWorker<List<FileSearchResult>, Void> worker =
-                new SwingWorker<List<FileSearchResult>, Void>() {
+        SwingWorker<List<FileSearchResult>, Void> worker = new SwingWorker<List<FileSearchResult>, Void>() {
 
             @Override
             protected List<FileSearchResult> doInBackground() {
@@ -575,7 +498,8 @@ public class MainWindow extends JFrame {
                 for (Thread t : threads) {
                     try {
                         t.join(5000); // chờ tối đa 5 giây mỗi peer
-                    } catch (InterruptedException ignored) {}
+                    } catch (InterruptedException ignored) {
+                    }
                 }
 
                 for (List<FileSearchResult> bucket : partials) {
@@ -597,7 +521,7 @@ public class MainWindow extends JFrame {
                                 "Không có kết quả", JOptionPane.INFORMATION_MESSAGE);
                     } else {
                         for (FileSearchResult r : results) {
-                            searchTableModel.addRow(new Object[]{
+                            searchTableModel.addRow(new Object[] {
                                     r.getFileName(),
                                     formatFileSize(r.getFileSize()),
                                     r.getPeerIp(),
@@ -620,11 +544,12 @@ public class MainWindow extends JFrame {
      */
     private void downloadSelectedFile() {
         int row = tblSearchResults.getSelectedRow();
-        if (row < 0) return;
+        if (row < 0)
+            return;
 
         String fileName = (String) searchTableModel.getValueAt(row, 0);
-        String peerIp   = (String) searchTableModel.getValueAt(row, 2);
-        int peerPort    = (Integer) searchTableModel.getValueAt(row, 3);
+        String peerIp = (String) searchTableModel.getValueAt(row, 2);
+        int peerPort = (Integer) searchTableModel.getValueAt(row, 3);
         String savePath = fileManager.getSharedFolderPath();
 
         // Kiểm tra file đã có cục bộ chưa
@@ -635,7 +560,8 @@ public class MainWindow extends JFrame {
                     "File đã tồn tại",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.WARNING_MESSAGE);
-            if (confirm != JOptionPane.YES_OPTION) return;
+            if (confirm != JOptionPane.YES_OPTION)
+                return;
         }
 
         log("Đang tải \"" + fileName + "\" từ " + peerIp + ":" + peerPort + "...");
@@ -685,10 +611,7 @@ public class MainWindow extends JFrame {
     // HELPERS
     // ------------------------------------------------------------------
     private void log(String message) {
-        SwingUtilities.invokeLater(() -> {
-            txtLog.append("[" + getCurrentTime() + "] " + message + "\n");
-            txtLog.setCaretPosition(txtLog.getDocument().getLength());
-        });
+        System.out.println("[" + getCurrentTime() + "] " + message);
     }
 
     private String getCurrentTime() {
