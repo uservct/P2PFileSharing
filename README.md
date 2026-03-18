@@ -1,47 +1,90 @@
-# P2P File Sharing Application
+# P2P File Sharing - Đề 12
 
-Ứng dụng chia sẻ file ngang hàng (Peer-to-Peer) sử dụng TCP và UDP Discovery Mechanism.
+Ứng dụng chia sẻ file ngang hàng (Peer-to-Peer File Sharing) cho môn Lập Trình Mạng.
 
-## Tính năng
+## Đề tài
 
-### Chức năng cơ bản
-- ✅ **Kết nối P2P thuần túy**: Không cần server trung gian, các peer kết nối trực tiếp với nhau
-- ✅ **UDP Discovery**: Tự động tìm kiếm các peer trong mạng LAN
-- ✅ **Gửi/Nhận file qua TCP**: Transfer file trực tiếp giữa các peer
-- ✅ **Giao diện GUI**: Giao diện đồ họa Swing dễ sử dụng
-- ✅ **Quản lý thư mục chia sẻ**: Thiết lập thư mục để chia sẻ file
-- ✅ **Hiển thị danh sách peer**: Xem các peer đang online
-- ✅ **Hiển thị danh sách file**: Xem file trong thư mục chia sẻ
+**Đề 12: Xây dựng ứng dụng chia sẻ file ngang hàng (P2P File Sharing)**
 
-### Tính năng mở rộng (sẽ phát triển sau)
-- 🔜 Tìm kiếm file theo tên
+- **Mô tả:** Các client gửi/nhận file trực tiếp với nhau, **không có server trung tâm**.
+- **Công nghệ:** Socket **TCP + Discovery mechanism**.
+- **Mở rộng:** Tìm kiếm file, phân tán dữ liệu, giao diện đồ họa.
+
+## Trạng thái hiện tại
+
+### Chức năng cốt lõi (đã có)
+- ✅ Kết nối P2P trực tiếp giữa các peer
+- ✅ Gửi/Nhận file qua TCP
+- ✅ Cơ chế xác nhận khi nhận file (Accept/Reject)
+- ✅ Tự động phát hiện peer bằng discovery mechanism
+- ✅ Giao diện đồ họa Swing (chọn thư mục, xem peers, gửi file)
+
+### Chức năng mở rộng
+- ✅ Tìm kiếm file theo từ khóa trên nhiều peer
+- ✅ Tải file từ peer khác theo kết quả tìm kiếm
 - 🔜 Phân tán dữ liệu (distributed storage)
-- 🔜 Tìm kiếm nâng cao với metadata
-- 🔜 Transfer progress bar chi tiết
-- 🔜 Quản lý lịch sử transfer
+
+
+## Kiến trúc kỹ thuật
+
+### 1) File transfer (TCP)
+
+Ứng dụng dùng kết nối TCP trực tiếp giữa 2 peer để gửi dữ liệu file.
+
+Luồng gửi file cơ bản:
+
+```
+Client -> Server
+1. Gửi tên file (text + '\n')
+2. Gửi kích thước file (text + '\n')
+3. Đợi phản hồi ACCEPT/REJECT
+4. Nếu ACCEPT thì gửi binary data
+```
+
+### 2) Discovery mechanism (TCP-based)
+
+Project hiện tại dùng **TCP discovery** (không phải UDP broadcast):
+
+- Mỗi peer mở discovery server tại cổng: `9000 + (peerPort % 1000)`
+- Quét các dải subnet nội bộ để tìm peer đang mở discovery port
+- Làm mới danh sách peer theo chu kỳ + khi người dùng bấm "Làm mới danh sách"
+- Peer không phản hồi quá 30 giây sẽ bị loại khỏi danh sách
+
+### 3) Tìm kiếm và tải file
+
+`PeerServer` hỗ trợ thêm các request dạng text:
+
+- `SEARCH:<keyword>` -> trả về danh sách file khớp
+- `SEND:<filename>` -> trả về nội dung file để peer khác tải về
 
 ## Cấu trúc dự án
 
-```
+```text
 P2PFileSharing/
-├── src/
+├── src/                                # Mã nguồn chính
 │   └── p2p/
 │       ├── main/
-│       │   └── Main.java              # Entry point (GUI/CLI mode)
-│       ├── model/
-│       │   └── PeerInfo.java          # Data model cho peer
-│       ├── network/
-│       │   ├── PeerClient.java        # TCP client để gửi file
-│       │   ├── PeerServer.java        # TCP server để nhận file
-│       │   └── DiscoveryService.java  # UDP discovery service
-│       ├── util/
-│       │   └── FileManager.java       # Quản lý thư mục chia sẻ
-│       └── gui/
-│           └── MainWindow.java        # Giao diện Swing
-└── shared/                             # Thư mục chia sẻ mặc định
+│       │   └── Main.java              # Điểm khởi chạy ứng dụng
+│       ├── gui/                        # Giao diện Swing
+│       │   ├── MainWindow.java        # Cửa sổ chính
+│       │   ├── PeersPanel.java        # Panel danh sách peer + thao tác gửi
+│       │   ├── SearchPanel.java       # Panel tìm kiếm & tải file
+│       │   ├── SharedFilesPanel.java  # Hiển thị file đang chia sẻ
+│       │   └── SharedFolderPanel.java # Chọn/thay đổi thư mục chia sẻ
+│       ├── network/                    # Tầng mạng TCP
+│       │   ├── PeerClient.java        # Client gửi request/gửi file
+│       │   ├── PeerServer.java        # Server nhận request/file, xử lý SEARCH/SEND
+│       │   └── DiscoveryService.java  # Discovery peer trong LAN (TCP-based)
+│       ├── model/                      # Model dữ liệu
+│       │   ├── PeerInfo.java          # Thông tin peer (ip/port/trạng thái)
+│       │   └── FileSearchResult.java  # Kết quả tìm kiếm file từ peer
+│       └── util/
+│           └── FileManager.java       # Tiện ích thao tác file/thư mục chia sẻ
+├── bin/                                # File .class sau khi biên dịch
+└── README.md                           # Tài liệu mô tả project
 ```
 
-## Cách sử dụng
+## Cách build và chạy
 
 ### Biên dịch
 
@@ -50,125 +93,50 @@ cd d:\Code\LTM\Project\P2PFileSharing
 javac -d bin -sourcepath src src/p2p/main/Main.java
 ```
 
-### Chạy GUI Mode (mặc định)
+### Chạy ứng dụng (GUI)
 
 ```bash
 java -cp bin p2p.main.Main
 ```
 
-Nhập cổng khi được yêu cầu (ví dụ: 5000, 5001, 5002...). Mỗi peer cần port khác nhau.
+> Khi chạy, chương trình sẽ yêu cầu nhập `port` (ví dụ: 5000, 5001, 5002). Mỗi peer dùng một port khác nhau.
 
-### Chạy CLI Mode
+## Hướng dẫn sử dụng nhanh
 
-```bash
-java -cp bin p2p.main.Main --cli
-```
+1. Mở peer A, nhập port (ví dụ `5000`), chọn thư mục chia sẻ.
+2. Mở peer B, nhập port khác (ví dụ `5001`), chọn thư mục chia sẻ.
+3. Ở panel **Danh sách Peers**, bấm **Làm mới danh sách** để discover peer.
+4. Gửi file:
+   - Chọn peer đích
+   - Chọn file trong danh sách hoặc bấm **Gửi file khác...**
+5. Tìm kiếm file:
+   - Vào tab **Tìm kiếm File**
+   - Nhập từ khóa, bấm **Tìm kiếm**
+   - Chọn kết quả và bấm **Tải về**
 
-### Hướng dẫn sử dụng GUI
+## Lưu ý triển khai
 
-1. **Khởi động peer đầu tiên**:
-   - Chạy ứng dụng, nhập port (ví dụ: 5000)
-   - Chọn thư mục chia sẻ (hoặc để mặc định là `shared/`)
-   - Copy file vào thư mục chia sẻ
-   - Click "Làm mới danh sách file"
-
-2. **Khởi động peer thứ hai** (terminal/window khác):
-   - Chạy ứng dụng, nhập port khác (ví dụ: 5001)
-   - Click "Làm mới danh sách" trong panel Peers
-   - Peer 1 và Peer 2 sẽ tự động tìm thấy nhau
-
-3. **Gửi file**:
-   - Chọn peer đích trong bảng "Danh sách Peers"
-   - Chọn file trong "File trong thư mục chia sẻ"
-   - Click "Gửi file đã chọn"
-   - Hoặc click "Gửi file khác..." để gửi file ngoài thư mục chia sẻ
-
-4. **Nhận file**:
-   - File nhận được tự động lưu vào thư mục `shared/`
-   - Sẽ có thông báo trong Log khi nhận được file
-   - Click "Làm mới danh sách file" để xem file mới nhận
-
-## Kiến trúc kỹ thuật
-
-### TCP Protocol (File Transfer)
-
-Style đơn giản theo file mẫu với `InputStream`/`OutputStream`:
-
-```
-Client → Server:
-1. Gửi tên file (UTF-8 text + '\n')
-2. Gửi kích thước file (số dạng text + '\n')
-3. Gửi dữ liệu file (binary bytes)
-```
-
-### UDP Protocol (Peer Discovery)
-
-```
-Discovery Request: "DISCOVER:<peerPort>:<discoveryPort>:<responsePort>"
-Discovery Response: "RESPONSE:<peerPort>:<discoveryPort>"
-```
-
-- Mỗi peer listen trên port discovery: `8888 + (peerPort % 10000)`
-- Discovery scan tất cả port 8888-8899 để tìm peer
-- Peer timeout: 30 giây (tự động xóa nếu không phản hồi)
-
-### Threading Model
-
-- **Main Thread**: Swing Event Dispatch Thread (EDT) cho GUI
-- **Server Thread**: Accept connections trong background
-- **Handler Threads**: Mỗi file transfer có thread riêng
-- **Discovery Thread**: UDP listener và scanner
-- **SwingWorker**: Background file transfer với progress callback
-
-## Code Style
-
-Theo đúng yêu cầu file mẫu giảng viên:
-- ✅ Sử dụng socket TCP thuần với `InputStream`/`OutputStream`
-- ✅ Không dùng framework phức tạp
-- ✅ Multi-threaded đơn giản với `new Thread(() -> ...).start()`
-- ✅ Try-finally pattern để đóng socket
-- ✅ Text-based protocol dễ debug
-
-## Demo
-
-### Chạy 3 peers trên cùng máy:
-
-**Terminal 1:**
-```bash
-java -cp bin p2p.main.Main
-# Nhập port: 5000
-```
-
-**Terminal 2:**
-```bash
-java -cp bin p2p.main.Main
-# Nhập port: 5001
-```
-
-**Terminal 3:**
-```bash
-java -cp bin p2p.main.Main
-# Nhập port: 5002
-```
-
-Cả 3 peer sẽ tự động discover nhau và có thể gửi file cho nhau.
+- Hiện tại project chạy theo **GUI mode**.
+- Chưa triển khai phần phân tán dữ liệu (distributed storage).
+- Chức năng tìm kiếm là theo tên file (contains, không phân biệt hoa/thường).
 
 ## Troubleshooting
 
-### Port already in use
-- Chọn port khác (1024-65535)
-- Kill process đang dùng port: `netstat -ano | findstr :<port>`
+### Không bind được port
+- Chọn port khác trong khoảng `1024-65535`
+- Kiểm tra port đang bị chiếm trên Windows:
+  `netstat -ano | findstr :<port>`
 
-### Không tìm thấy peer
-- Kiểm tra firewall có chặn UDP port 8888-8899 không
-- Đảm bảo cả 2 peer đang chạy trên cùng mạng LAN
-- Click "Làm mới danh sách" để scan lại
+### Không thấy peer
+- Đảm bảo các máy cùng LAN/subnet
+- Kiểm tra firewall có cho phép TCP kết nối nội bộ
+- Bấm lại nút **Làm mới danh sách**
 
-### File không gửi được
-- Kiểm tra peer đích có online không
-- Kiểm tra firewall có chặn TCP port không
-- Xem log panel để biết lỗi chi tiết
+### Gửi/tải file thất bại
+- Kiểm tra peer đích còn online
+- Kiểm tra thư mục chia sẻ có quyền ghi
+- Xem log console để xác định lỗi cụ thể
 
 ## Tác giả
 
-Project P2P File Sharing - Đề tài Lập Trình Mạng
+Project P2P File Sharing - Đề tài Lập Trình Mạng (Đề 12)
