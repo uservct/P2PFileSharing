@@ -1,27 +1,29 @@
 package p2p.gui;
 
 import java.awt.BorderLayout;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 import p2p.model.PeerInfo;
+import p2p.network.DiscoveryService;
 
 public class PeersPanel extends JPanel {
-    public interface Listener {
-        void onRefreshPeers();
-    }
-
-    private final Listener listener;
+    private final DiscoveryService discoveryService;
+    private final Consumer<String> logger;
     private JTable tblPeers;
     private DefaultTableModel peerTableModel;
     private JButton btnRefreshPeers;
 
-    public PeersPanel(Listener listener) {
-        this.listener = listener;
+    public PeersPanel(DiscoveryService discoveryService, Consumer<String> logger) {
+        this.discoveryService = discoveryService;
+        this.logger = logger;
         initializeComponents();
     }
 
@@ -40,14 +42,37 @@ public class PeersPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(tblPeers);
 
         btnRefreshPeers = new JButton("Làm mới danh sách");
-        btnRefreshPeers.addActionListener(e -> {
-            if (listener != null) {
-                listener.onRefreshPeers();
-            }
-        });
+        btnRefreshPeers.addActionListener(e -> refreshPeers());
 
         add(scrollPane, BorderLayout.CENTER);
         add(btnRefreshPeers, BorderLayout.SOUTH);
+    }
+
+    public void refreshPeers() {
+        if (discoveryService == null) {
+            setPeers(new ArrayList<>());
+            return;
+        }
+
+        log("Đang tìm kiếm peers...");
+        setRefreshEnabled(false);
+
+        new Thread(() -> {
+            discoveryService.sendDiscoveryRequest();
+
+            try {
+                Thread.sleep(5500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            List<PeerInfo> peers = discoveryService.getPeerInfoList();
+            SwingUtilities.invokeLater(() -> {
+                setPeers(peers);
+                setRefreshEnabled(true);
+                log("Tìm thấy " + peers.size() + " peer(s)");
+            });
+        }).start();
     }
 
     public void setPeers(List<PeerInfo> peers) {
@@ -93,5 +118,11 @@ public class PeersPanel extends JPanel {
 
     public void setRefreshEnabled(boolean enabled) {
         btnRefreshPeers.setEnabled(enabled);
+    }
+
+    private void log(String message) {
+        if (logger != null) {
+            logger.accept(message);
+        }
     }
 }
