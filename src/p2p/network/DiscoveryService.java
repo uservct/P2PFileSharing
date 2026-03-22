@@ -77,7 +77,7 @@ public class DiscoveryService {
                             subnet = ipStr.substring(0, lastDot);
                             if (!subnetRanges.contains(subnet)) {
                                 subnetRanges.add(subnet);
-                                System.out.println("  ✓✓✓ THÊM SUBNET: " + subnet + ".1-254 ✓✓✓");
+                                System.out.println("THÊM SUBNET: " + subnet + ".1-254");
                             }
                         }
                     }
@@ -85,13 +85,13 @@ public class DiscoveryService {
             }
 
             if (subnetRanges.isEmpty()) {
-                System.out.println("⚠ Không phát hiện subnet, sẽ quét 192.168.1");
+                System.out.println("Không phát hiện subnet, sẽ quét 192.168.1");
                 subnetRanges.add("192.168.1");
                 subnetRanges.add("127.0.0");
             }
 
         } catch (SocketException e) {
-            System.err.println("❌ Lỗi phát hiện subnet: " + e.getMessage());
+            System.err.println("Lỗi phát hiện subnet: " + e.getMessage());
             e.printStackTrace();
             subnetRanges.add("192.168.1");
             subnetRanges.add("127.0.0");
@@ -99,7 +99,7 @@ public class DiscoveryService {
 
         System.out.println("\n=== KẾT QUẢ SUBNET DETECTION ===");
         for (String subnet : subnetRanges) {
-            System.out.println("  → Sẽ quét: " + subnet + ".1-254");
+            System.out.println("Sẽ quét: " + subnet + ".1-254");
         }
         System.out.println("=================================\n");
     }
@@ -117,7 +117,7 @@ public class DiscoveryService {
             try {
                 serverSocket = new ServerSocket(discoveryPort);
                 serverSocket.setSoTimeout(1000); // Timeout để có thể check running flag
-                System.out.println("✓ TCP Discovery Server đang lắng nghe trên port: " + discoveryPort);
+                System.out.println("TCP Discovery Server đang lắng nghe trên port: " + discoveryPort);
 
                 while (running) {
                     try {
@@ -130,7 +130,7 @@ public class DiscoveryService {
                 }
             } catch (IOException e) {
                 if (running) {
-                    System.err.println("❌ Lỗi TCP Server: " + e.getMessage());
+                    System.err.println("Lỗi TCP Server: " + e.getMessage());
                 }
             }
         }, "TCP-Discovery-Server").start();
@@ -143,7 +143,7 @@ public class DiscoveryService {
                 return;
             }
 
-            System.out.println("✓ Bắt đầu quét subnet...\n");
+            System.out.println("Bắt đầu quét subnet...\n");
 
             while (running) {
                 try {
@@ -186,7 +186,7 @@ public class DiscoveryService {
                 if (peerInfo == null) {
                     peerInfo = new PeerInfo("peer_" + port, clientIp, port, "Peer-" + port);
                     discoveredPeers.put(peerKey, peerInfo);
-                    System.out.println("✓ Phát hiện peer mới: " + peerKey);
+                    System.out.println("Phát hiện peer mới: " + peerKey);
                 } else {
                     peerInfo.updateLastSeen();
                 }
@@ -206,9 +206,7 @@ public class DiscoveryService {
      * Quét tất cả subnet để tìm peer
      */
     private void scanForPeers() {
-        System.out.println("\n╔════════════════════════════════════════╗");
         System.out.println("║   BẮT ĐẦU QUÉT TÌM PEER (TCP SCAN)    ║");
-        System.out.println("╚════════════════════════════════════════╝");
 
         for (String subnet : subnetRanges) {
             System.out.println("\n→ Đang quét dải: " + subnet + ".1 đến " + subnet + ".254");
@@ -225,7 +223,7 @@ public class DiscoveryService {
             }
         }
 
-        System.out.println("→ Đã gửi " + (subnetRanges.size() * 254 * 10) + " yêu cầu quét");
+        System.out.println("Đã gửi " + (subnetRanges.size() * 254 * 10) + " yêu cầu quét");
         System.out.println("  (Chờ kết quả...)\n");
     }
 
@@ -264,13 +262,13 @@ public class DiscoveryService {
                 if (peerInfo == null) {
                     peerInfo = new PeerInfo("peer_" + port, ip, port, "Peer-" + port);
                     discoveredPeers.put(peerKey, peerInfo);
-                    System.out.println("\n✓✓✓ TÌM THẤY PEER MỚI: " + peerKey + " ✓✓✓\n");
+                    System.out.println("\nTÌM THẤY PEER MỚI: " + peerKey + " \n");
                 } else {
                     peerInfo.updateLastSeen();
                     System.out.println("  [SCAN] Cập nhật peer: " + peerKey);
                 }
             } else {
-                System.out.println("  [SCAN] ⚠ Response không hợp lệ từ " + ip);
+                System.out.println("  [SCAN] Response không hợp lệ từ " + ip);
             }
 
         } catch (ConnectException e) {
@@ -338,7 +336,7 @@ public class DiscoveryService {
             scanExecutor.shutdownNow();
         }
 
-        System.out.println("\n✗ TCP Discovery Service đã dừng\n");
+        System.out.println("\nTCP Discovery Service đã dừng\n");
     }
 
     /**
@@ -357,7 +355,7 @@ public class DiscoveryService {
 
         for (String key : toRemove) {
             discoveredPeers.remove(key);
-            System.out.println("⊗ Removed timeout peer: " + key);
+            System.out.println("Removed timeout peer: " + key);
         }
     }
 
