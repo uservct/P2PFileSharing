@@ -11,7 +11,7 @@ import java.util.concurrent.Executors;
 import p2p.model.PeerInfo;
 
 /**
- * TCP Discovery Service - Không dùng UDP broadcast
+ * TCP Discovery Service
  * Mỗi peer mở TCP server và quét subnet để tìm peer khác
  */
 public class DiscoveryService {
@@ -30,11 +30,9 @@ public class DiscoveryService {
         this.peerPort = peerPort;
         this.discoveryPort = BASE_PORT + (peerPort % 1000);
 
-        System.out.println("\n========================================");
         System.out.println("TCP DISCOVERY SERVICE KHỞI ĐỘNG");
         System.out.println("Peer Port: " + peerPort);
         System.out.println("Discovery Port: " + discoveryPort);
-        System.out.println("========================================\n");
 
         detectSubnetRanges();
     }
@@ -43,7 +41,7 @@ public class DiscoveryService {
      * Phát hiện tất cả dải subnet cần quét
      */
     private void detectSubnetRanges() {
-        System.out.println("\n=== PHÁT HIỆN DÃNG MẠNG ===");
+        System.out.println("\n PHÁT HIỆN DẢI MẠNG");
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
@@ -71,7 +69,7 @@ public class DiscoveryService {
                     // Tính subnet cho các prefix length phổ biến
                     String subnet = null;
                     if (prefixLength >= 16 && prefixLength <= 32) {
-                        // Lấy 3 octet đầu cho /24, /22, /23, etc.
+                        // Lấy 3 octet đầu cho /24, /22, /23, etc bit mạng.
                         int lastDot = ipStr.lastIndexOf('.');
                         if (lastDot > 0) {
                             subnet = ipStr.substring(0, lastDot);
@@ -97,7 +95,7 @@ public class DiscoveryService {
             subnetRanges.add("127.0.0");
         }
 
-        System.out.println("\n=== KẾT QUẢ SUBNET DETECTION ===");
+        System.out.println("\nKẾT QUẢ SUBNET DETECTION");
         for (String subnet : subnetRanges) {
             System.out.println("Sẽ quét: " + subnet + ".1-254");
         }
@@ -206,10 +204,10 @@ public class DiscoveryService {
      * Quét tất cả subnet để tìm peer
      */
     private void scanForPeers() {
-        System.out.println("║   BẮT ĐẦU QUÉT TÌM PEER (TCP SCAN)    ║");
+        System.out.println("BẮT ĐẦU QUÉT TÌM PEER (TCP SCAN)");
 
         for (String subnet : subnetRanges) {
-            System.out.println("\n→ Đang quét dải: " + subnet + ".1 đến " + subnet + ".254");
+            System.out.println("\n Đang quét dải: " + subnet + ".1 đến " + subnet + ".254");
             System.out.println("  Discovery Ports: " + BASE_PORT + " đến " + (BASE_PORT + 9));
             System.out.println("  Timeout: " + SCAN_TIMEOUT + "ms\n");
 

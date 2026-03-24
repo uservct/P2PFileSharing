@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Class to store peer information in the P2P network
+ * Lưu thông tin về một peer trong mạng P2P, bao gồm ID, địa chỉ IP, cổng
  */
 public class PeerInfo implements Serializable {
     private static final long serialVersionUID = 1L;

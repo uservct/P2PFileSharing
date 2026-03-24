@@ -41,7 +41,7 @@ public class PeerClient {
                 OutputStream os = socket.getOutputStream();
                 InputStream is = socket.getInputStream();
 
-                // 1. Gửi tên file (theo style code mẫu: write text + newline)
+                // 1. Gửi tên file
                 String fileName = file.getName();
                 os.write((fileName + "\n").getBytes("UTF-8"));
 
@@ -124,8 +124,8 @@ public class PeerClient {
 
     // -----------------------------------------------------------------------
     // 2. TÌM KIẾM FILE TRÊN MỘT PEER
-    //    Gửi: SEARCH:[keyword]\n
-    //    Nhận: RESULTS:[n]\n[name1]|[size1]\n...
+    // Gửi: SEARCH:[keyword]\n
+    // Nhận: RESULTS:[n]\n[name1]|[size1]\n...
     // -----------------------------------------------------------------------
     public List<FileSearchResult> searchFilesOnPeer(String host, int port, String keyword)
             throws IOException {
@@ -150,11 +150,13 @@ public class PeerClient {
             int count = Integer.parseInt(firstLine.substring(8).trim());
             for (int i = 0; i < count; i++) {
                 String line = readLine(is);
-                if (line == null || line.isEmpty()) break;
+                if (line == null || line.isEmpty())
+                    break;
 
                 // Format: filename|filesize
                 int sep = line.lastIndexOf('|');
-                if (sep < 0) continue;
+                if (sep < 0)
+                    continue;
 
                 String fileName = line.substring(0, sep);
                 long fileSize = Long.parseLong(line.substring(sep + 1).trim());
@@ -167,8 +169,8 @@ public class PeerClient {
 
     // -----------------------------------------------------------------------
     // 3. TẢI FILE TỪ PEER (download on demand)
-    //    Gửi: SEND:[filename]\n
-    //    Nhận: [filesize]\n[binary data]  hoặc ERROR:[msg]\n
+    // Gửi: SEND:[filename]\n
+    // Nhận: [filesize]\n[binary data] hoặc ERROR:[msg]\n
     // -----------------------------------------------------------------------
     public void downloadFileFromPeer(String host, int port, String fileName, String savePath)
             throws IOException {
@@ -222,7 +224,7 @@ public class PeerClient {
     }
 
     // -----------------------------------------------------------------------
-    // HELPER
+    // HÀM HỖ TRỢ: Đọc một dòng từ InputStream (kết thúc bằng \n)
     // -----------------------------------------------------------------------
     private String readLine(InputStream is) throws IOException {
         StringBuilder sb = new StringBuilder();
